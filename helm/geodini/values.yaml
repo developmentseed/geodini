@@ -23,6 +23,7 @@ api:
     REDIS_HOST: "geodini-redis-master" # Service name of Redis subchart
     REDIS_PORT: "6379"
     REDIS_DB: "0"
+    OVERTURE_DATA_VERSION: "2025-10-22.0" # Overture now only maintain data for 60 days so this will need to be updated https://docs.overturemaps.org/blog/2025/09/24/release-notes/
     # POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB are taken from a secret
   initContainer:
     ingest:

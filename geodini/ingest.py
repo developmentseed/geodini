@@ -34,6 +34,7 @@ FORCE_RECREATE = os.getenv("FORCE_RECREATE", "false").lower() in ("true", "1", "
 engine = create_engine(f"postgresql://{user}:{password}@{host}:{port}/{database}")
 
 DATA_PATH = os.getenv("DATA_PATH") or "/tmp/data"
+OVERTURE_DATA_VERSION = os.getenv("OVERTURE_DATA_VERSION", "2025-10-22.0")
 
 # Configuration
 BATCH_SIZE = 10000  # Adjust based on your system's memory
@@ -152,11 +153,11 @@ def check_and_download_data():
     data_requirements = {
         "divisions": {
             "local_path": os.path.join(DATA_PATH, "divisions"),
-            "s3_path": "s3://overturemaps-us-west-2/release/2025-02-19.0/theme=divisions/type=division/",
+            "s3_path": f"s3://overturemaps-us-west-2/release/{OVERTURE_DATA_VERSION}/theme=divisions/type=division/",
         },
         "division_areas": {
             "local_path": os.path.join(DATA_PATH, "division_areas"),
-            "s3_path": "s3://overturemaps-us-west-2/release/2025-02-19.0/theme=divisions/type=division_area/",
+            "s3_path": "s3://overturemaps-us-west-2/release/{OVERTURE_DATA_VERSION}/theme=divisions/type=division_area/",
         },
     }
 

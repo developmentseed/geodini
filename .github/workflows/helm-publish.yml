@@ -40,7 +40,7 @@ jobs:
 
       - name: Push Helm chart to GHCR
         run: |
-          helm push ./chart-packages/*.tgz oci://ghcr.io/sunu/geodini/helm-chart
+          helm push ./chart-packages/*.tgz oci://ghcr.io/developmentseed/geodini/helm-chart
 
       - name: List packaged charts
         run: |
