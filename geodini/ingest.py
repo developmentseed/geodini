@@ -157,7 +157,7 @@ def check_and_download_data():
         },
         "division_areas": {
             "local_path": os.path.join(DATA_PATH, "division_areas"),
-            "s3_path": "s3://overturemaps-us-west-2/release/{OVERTURE_DATA_VERSION}/theme=divisions/type=division_area/",
+            "s3_path": f"s3://overturemaps-us-west-2/release/{OVERTURE_DATA_VERSION}/theme=divisions/type=division_area/",
         },
     }
 
