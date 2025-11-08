@@ -35,6 +35,8 @@ spec:
           imagePullPolicy: {{ .Values.api.image.pullPolicy }}
           command: {{ toJson .Values.api.initContainer.ingest.command }}
           env:
+            - name: OVERTURE_DATA_VERSION
+              value: {{ .Values.api.env.OVERTURE_DATA_VERSION }}
             - name: POSTGRES_HOST
               value: {{ .Values.api.env.POSTGRES_HOST | quote }}
             - name: POSTGRES_PORT

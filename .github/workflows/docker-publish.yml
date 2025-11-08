@@ -28,7 +28,7 @@ jobs:
         id: meta-api
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/sunu/geodini/api
+          images: ghcr.io/developmentseed/geodini/api
           tags: |
             type=sha
             type=raw,value=latest
