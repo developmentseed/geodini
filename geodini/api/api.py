@@ -7,7 +7,8 @@ import uvicorn
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 
-from geodini.agents.geocoder_agent import search
+from geodini.agents.geocoder_agent import search, simplify_geometry_to_size
+from geodini.agents.utils.geocoder import get_geometry_by_id
 from geodini.agents.utils.postgis_exec import get_postgis_connection
 from geodini.cache import init_cache
 
@@ -50,10 +51,11 @@ async def root():
 @app.get("/search")
 async def search_endpoint(
     query: str = Query(..., description="The search query string"),
+    max_bytes: int = Query(0, description="Max geometry size in bytes (0 = use server default)"),
 ) -> dict[str, Any]:
     """
     Unified search endpoint that handles both simple and complex queries.
-    
+
     Simple queries: "New York City", "London in Canada", "India"
     Complex queries: "India and Sri Lanka", "Within 100km of Mumbai", "France north of Paris"
 
@@ -65,6 +67,15 @@ async def search_endpoint(
         # Get result from unified search
         result = await search(query)
 
+        # Apply byte-threshold simplification if requested
+        effective_max_bytes = max_bytes or int(os.getenv("GEOMETRY_MAX_BYTES", "0"))
+        if effective_max_bytes > 0 and result.get("results"):
+            for r in result["results"]:
+                if r.get("geometry"):
+                    r["geometry"] = simplify_geometry_to_size(
+                        r["geometry"], max_bytes=effective_max_bytes
+                    )
+
         return result
 
     except Exception as e:
@@ -72,6 +83,25 @@ async def search_endpoint(
         raise HTTPException(
             status_code=500, detail=f"Error processing search query: {str(e)}"
         )
+
+
+@app.get("/geometry/{geometry_id}")
+async def get_geometry_endpoint(
+    geometry_id: str,
+    simplify: bool = Query(True, description="Whether to simplify the geometry"),
+    max_bytes: int = Query(0, description="Max geometry size in bytes (0 = no limit)"),
+) -> dict[str, Any]:
+    """Retrieve full geometry by division ID."""
+    result = get_geometry_by_id(geometry_id, simplify=simplify)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Geometry not found")
+
+    if max_bytes > 0 and result.get("geometry"):
+        result["geometry"] = simplify_geometry_to_size(
+            result["geometry"], max_bytes=max_bytes
+        )
+
+    return result
 
 
 @app.get("/health")

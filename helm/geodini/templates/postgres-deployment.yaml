@@ -23,8 +23,12 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       serviceAccountName: {{ include "geodini.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.postgres.podSecurityContext | nindent 8 }}
       containers:
         - name: postgres
+          securityContext:
+            {{- toYaml .Values.postgres.containerSecurityContext | nindent 12 }}
           image: "{{ .Values.postgres.image.repository }}:{{ .Values.postgres.image.tag }}"
           imagePullPolicy: {{ .Values.postgres.image.pullPolicy }}
           ports:
@@ -35,17 +39,17 @@ spec:
             - name: POSTGRES_USER
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "geodini.fullname" . }}-geodini-secret
+                  name: {{ include "geodini.secretName" . }}
                   key: POSTGRES_USER
             - name: POSTGRES_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "geodini.fullname" . }}-geodini-secret
+                  name: {{ include "geodini.secretName" . }}
                   key: POSTGRES_PASSWORD
             - name: POSTGRES_DB  # Or POSTGRES_INITDB_ARGS for more complex init
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "geodini.fullname" . }}-geodini-secret
+                  name: {{ include "geodini.secretName" . }}
                   key: POSTGRES_DB
             - name: PGDATA
               value: /var/lib/postgresql/data/pgdata # Standard for postgres images
@@ -70,7 +74,7 @@ spec:
             timeoutSeconds: 5
             failureThreshold: 6
           resources:
-            {} # Define resources
+            {{- toYaml .Values.postgres.resources | nindent 12 }}
           volumeMounts:
             - name: postgres-data
               mountPath: /var/lib/postgresql/data

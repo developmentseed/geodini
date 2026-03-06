@@ -5,6 +5,8 @@ from dataclasses import dataclass
 import psycopg2
 from pydantic_ai import Agent
 
+from geodini.models import MODEL_HEAVY
+
 
 @dataclass
 class PostGISResult:
@@ -96,16 +98,17 @@ def search_subtype_within_aoi(subtype: str, aoi: dict) -> list[dict]:
     # aoi is the geojson geometry as dict as returned from run_postgis_query
     # return a list of dictionaries of the form:
     # { "geometry": result_geometry_as_json_dict, "country": country_name }
+    db_tolerance = float(os.getenv("GEOMETRY_DB_SIMPLIFY_TOLERANCE", "0.001"))
     conn = get_postgis_connection()
     try:
         with conn.cursor() as cur:
             # Convert AOI dict to GeoJSON string
             aoi_geojson = json.dumps(aoi)
-            
+
             # SQL query to find places of given subtype within the AOI
-            sql_query = """
+            sql_query = f"""
             SELECT 
-                ST_AsGeoJSON(ST_Simplify(geometry, 0.001)) as geometry,
+                ST_AsGeoJSON(ST_Simplify(geometry, {db_tolerance})) as geometry,
                 country,
                 COALESCE(common_en_name, primary_name) as name
             FROM all_geometries
@@ -141,7 +144,7 @@ def search_subtype_within_aoi(subtype: str, aoi: dict) -> list[dict]:
 
 
 postgis_agent = Agent(
-    "openai:gpt-4.1",
+    MODEL_HEAVY,
     output_type=PostGISResult,
     system_prompt="""
     You are a helpful assistant that can help with PostGIS queries.
@@ -185,7 +188,7 @@ postgis_agent = Agent(
 
 
 postgis_query_judgement_agent = Agent(
-    "openai:gpt-4o",
+    MODEL_HEAVY,
     output_type=PostGISResult,
     system_prompt="""
     You are a helpful assistant that can help with PostGIS queries.

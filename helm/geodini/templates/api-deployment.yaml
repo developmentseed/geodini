@@ -24,7 +24,7 @@ spec:
       {{- end }}
       serviceAccountName: {{ include "geodini.serviceAccountName" . }}
       securityContext:
-        {}
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
       volumes:
         - name: temp-dir
           emptyDir: {}
@@ -44,17 +44,17 @@ spec:
             - name: POSTGRES_USER
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "geodini.fullname" . }}-geodini-secret
+                  name: {{ include "geodini.secretName" . }}
                   key: POSTGRES_USER
             - name: POSTGRES_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "geodini.fullname" . }}-geodini-secret
+                  name: {{ include "geodini.secretName" . }}
                   key: POSTGRES_PASSWORD
             - name: POSTGRES_DB
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "geodini.fullname" . }}-geodini-secret
+                  name: {{ include "geodini.secretName" . }}
                   key: POSTGRES_DB
             - name: DATA_PATH
               value: /tmp/data
@@ -71,7 +71,7 @@ spec:
       containers:
         - name: api
           securityContext:
-            {}
+            {{- toYaml .Values.containerSecurityContext | nindent 12 }}
           image: "{{ .Values.api.image.repository }}:{{ .Values.api.image.tag }}"
           imagePullPolicy: {{ .Values.api.image.pullPolicy }}
           command:
@@ -97,17 +97,17 @@ spec:
             - name: POSTGRES_USER
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "geodini.fullname" . }}-geodini-secret
+                  name: {{ include "geodini.secretName" . }}
                   key: POSTGRES_USER
             - name: POSTGRES_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "geodini.fullname" . }}-geodini-secret
+                  name: {{ include "geodini.secretName" . }}
                   key: POSTGRES_PASSWORD
             - name: POSTGRES_DB
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "geodini.fullname" . }}-geodini-secret
+                  name: {{ include "geodini.secretName" . }}
                   key: POSTGRES_DB
             - name: REDIS_HOST
               value: {{ .Values.api.env.REDIS_HOST | quote }}
@@ -122,11 +122,25 @@ spec:
                   name: {{ include "geodini.fullname" . }}-redis
                   key: redis-password
             {{- end }}
-            - name: OPENAI_API_KEY
+            - name: LLM_API_KEY
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "geodini.fullname" . }}-geodini-secret
-                  key: OPENAI_API_KEY
+                  name: {{ include "geodini.secretName" . }}
+                  key: LLM_API_KEY
+            - name: MODEL_LIGHT
+              value: {{ .Values.api.env.MODEL_LIGHT | quote }}
+            - name: MODEL_HEAVY
+              value: {{ .Values.api.env.MODEL_HEAVY | quote }}
+            - name: GEOMETRY_DECIMAL_PRECISION
+              value: {{ .Values.api.env.GEOMETRY_DECIMAL_PRECISION | quote }}
+            - name: GEOMETRY_DB_SIMPLIFY_TOLERANCE
+              value: {{ .Values.api.env.GEOMETRY_DB_SIMPLIFY_TOLERANCE | quote }}
+            - name: GEOMETRY_AGENT_SIMPLIFY_TOLERANCE
+              value: {{ .Values.api.env.GEOMETRY_AGENT_SIMPLIFY_TOLERANCE | quote }}
+            - name: GEOMETRY_MCP_SIMPLIFY_TOLERANCE
+              value: {{ .Values.api.env.GEOMETRY_MCP_SIMPLIFY_TOLERANCE | quote }}
+            - name: GEOMETRY_MAX_BYTES
+              value: {{ .Values.api.env.GEOMETRY_MAX_BYTES | quote }}
           livenessProbe:
             httpGet:
               path: /

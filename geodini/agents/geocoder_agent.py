@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+import os
 import time
 import traceback
 from concurrent.futures import ThreadPoolExecutor
@@ -15,6 +16,7 @@ from shapely.geometry import mapping, shape
 from shapely.ops import transform
 
 from geodini import hookspecs, lib
+from geodini.models import MODEL_LIGHT
 from geodini.agents.utils.postgis_exec import (
     clear_geometries_table,
     create_geometries_table,
@@ -72,9 +74,12 @@ class RerankingResult:
     most_probable: str
 
 
+_GEOMETRY_PRECISION = int(os.getenv("GEOMETRY_DECIMAL_PRECISION", "6"))
+
+
 class RoundedFloat(float):
     def __repr__(self):
-        return f"{self:.2f}"
+        return f"{self:.{_GEOMETRY_PRECISION}f}"
 
 
 def recursively_convert(obj):
@@ -93,8 +98,11 @@ def clip_coordinates_with_rounding(geojson: dict[str, Any]) -> dict[str, Any]:
 
 
 def simplify_geometry(
-    geometry: dict[str, Any], tolerance_m: float = 10000
+    geometry: dict[str, Any],
+    tolerance_m: float | None = None,
 ) -> dict[str, Any]:
+    if tolerance_m is None:
+        tolerance_m = float(os.getenv("GEOMETRY_AGENT_SIMPLIFY_TOLERANCE", "10000"))
     to_meters = Transformer.from_crs("EPSG:4326", "EPSG:3857", always_xy=True).transform
     to_degrees = Transformer.from_crs(
         "EPSG:3857", "EPSG:4326", always_xy=True
@@ -111,8 +119,28 @@ def simplify_geometry(
     return geojson
 
 
+def simplify_geometry_to_size(
+    geometry: dict[str, Any],
+    max_bytes: int,
+    initial_tolerance_m: float = 1000,
+    max_iterations: int = 10,
+) -> dict[str, Any]:
+    """Iteratively simplify geometry until JSON representation fits within max_bytes."""
+    tolerance = initial_tolerance_m
+    result = simplify_geometry(geometry, tolerance_m=tolerance)
+
+    for _ in range(max_iterations):
+        serialized = json.dumps(result)
+        if len(serialized.encode("utf-8")) <= max_bytes:
+            return result
+        tolerance *= 2
+        result = simplify_geometry(geometry, tolerance_m=tolerance)
+
+    return result
+
+
 rephrase_agent = Agent(
-    "openai:gpt-4.1-mini",
+    MODEL_LIGHT,
     output_type=RephrasedQuery,
     system_prompt="""
         Given the search query, rephrase it to be more specific and accurate. We will be using this query to search for places in the overture database. So it helps to make the query be full formal name of the place.
@@ -131,7 +159,7 @@ rephrase_agent = Agent(
 
 
 routing_agent = Agent(
-    "openai:gpt-4.1-mini",
+    MODEL_LIGHT,
     output_type=RoutingResult,
     system_prompt="""
         Given the search query, determine if it is a simple or complex query.
@@ -143,7 +171,7 @@ routing_agent = Agent(
 
 
 complex_geocode_query_agent = Agent(
-    "openai:gpt-4.1-mini",
+    MODEL_LIGHT,
     output_type=ComplexGeocodeResult,
     system_prompt="""
         Given the search query, return ALL relevant places to search for in the query as queries.
@@ -170,8 +198,7 @@ complex_geocode_query_agent = Agent(
 
 
 rerank_agent = Agent(
-    # 4o-mini is smarter than 3.5-turbo. And does better in edge cases.
-    "openai:gpt-4.1-mini",
+    MODEL_LIGHT,
     output_type=RerankingResult,
     system_prompt="""
         Given the search query and results, rank them in order of 
@@ -312,6 +339,7 @@ async def simple_geocode(query: str, simplify_geometry: bool = True) -> dict:
         "query": query,
         "results": [
             {
+                "id": most_probable["id"] if most_probable else None,
                 "geometry": most_probable["geometry"] if most_probable else None,
                 "country": most_probable["country"] if most_probable else None,
                 "name": most_probable["name"] if most_probable else query,
