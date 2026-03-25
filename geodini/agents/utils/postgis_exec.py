@@ -5,6 +5,8 @@ from dataclasses import dataclass
 import psycopg2
 from pydantic_ai import Agent
 
+from geodini.models import MODEL_HEAVY
+
 
 @dataclass
 class PostGISResult:
@@ -96,20 +98,21 @@ def search_subtype_within_aoi(subtype: str, aoi: dict) -> list[dict]:
     # aoi is the geojson geometry as dict as returned from run_postgis_query
     # return a list of dictionaries of the form:
     # { "geometry": result_geometry_as_json_dict, "country": country_name }
+    db_tolerance = float(os.getenv("GEOMETRY_DB_SIMPLIFY_TOLERANCE", "0.001"))
     conn = get_postgis_connection()
     try:
         with conn.cursor() as cur:
             # Convert AOI dict to GeoJSON string
             aoi_geojson = json.dumps(aoi)
-            
+
             # SQL query to find places of given subtype within the AOI
             sql_query = """
-            SELECT 
-                ST_AsGeoJSON(ST_Simplify(geometry, 0.001)) as geometry,
+            SELECT
+                ST_AsGeoJSON(ST_Simplify(geometry, %s)) as geometry,
                 country,
                 COALESCE(common_en_name, primary_name) as name
             FROM all_geometries
-            WHERE 
+            WHERE
                 source_type = 'division'
                 AND subtype = %s
                 AND geometry IS NOT NULL
@@ -117,12 +120,12 @@ def search_subtype_within_aoi(subtype: str, aoi: dict) -> list[dict]:
                     geometry,
                     ST_GeomFromGeoJSON(%s)
                 )
-            ORDER BY 
+            ORDER BY
                 ST_Area(geometry) DESC
             LIMIT 100
             """
-            
-            cur.execute(sql_query, (subtype, aoi_geojson))
+
+            cur.execute(sql_query, (db_tolerance, subtype, aoi_geojson))
             results = cur.fetchall()
             
             # Convert results to expected format
@@ -141,7 +144,7 @@ def search_subtype_within_aoi(subtype: str, aoi: dict) -> list[dict]:
 
 
 postgis_agent = Agent(
-    "openai:gpt-4.1",
+    MODEL_HEAVY,
     output_type=PostGISResult,
     system_prompt="""
     You are a helpful assistant that can help with PostGIS queries.
@@ -185,7 +188,7 @@ postgis_agent = Agent(
 
 
 postgis_query_judgement_agent = Agent(
-    "openai:gpt-4o",
+    MODEL_HEAVY,
     output_type=PostGISResult,
     system_prompt="""
     You are a helpful assistant that can help with PostGIS queries.

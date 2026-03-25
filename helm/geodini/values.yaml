@@ -24,6 +24,15 @@ api:
     REDIS_PORT: "6379"
     REDIS_DB: "0"
     OVERTURE_DATA_VERSION: "2025-10-22.0" # Overture now only maintain data for 60 days so this will need to be updated https://docs.overturemaps.org/blog/2025/09/24/release-notes/
+    # Geometry configuration
+    GEOMETRY_DECIMAL_PRECISION: "6"         # Decimal places for coordinate rounding
+    GEOMETRY_DB_SIMPLIFY_TOLERANCE: "0.001" # ST_Simplify tolerance in degrees
+    GEOMETRY_AGENT_SIMPLIFY_TOLERANCE: "10000" # Shapely simplification tolerance in meters
+    GEOMETRY_MCP_SIMPLIFY_TOLERANCE: "1000" # MCP simplification tolerance in meters
+    GEOMETRY_MAX_BYTES: "0"                 # Max geometry size in bytes (0 = disabled)
+    # Model configuration — provider:model format (e.g., openai:gpt-4.1-mini, anthropic:claude-haiku-4-5, ollama:llama3)
+    MODEL_LIGHT: "anthropic:claude-haiku-4-5"   # Fast/cheap tasks: rephrase, routing, rerank
+    MODEL_HEAVY: "anthropic:claude-sonnet-4-6"  # SQL generation and error correction
     # POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB are taken from a secret
   initContainer:
     ingest:
@@ -68,6 +77,21 @@ postgres:
     type: ClusterIP # Internal service
     port: 5432
   # user, password, database configured in 'secrets'
+  # Postgres needs special security context: entrypoint runs as root, then drops to uid 999
+  podSecurityContext:
+    fsGroup: 999
+  containerSecurityContext:
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop:
+        - ALL
+  resources:
+    requests:
+      cpu: "250m"
+      memory: "512Mi"
+    limits:
+      cpu: "2"
+      memory: "2Gi"
   persistence:
     enabled: true
     storageClassName: "" # Or your specific storage class
@@ -126,6 +150,21 @@ ingress:
   #   hosts:
   #     - api.geodini.local
 
+# Security contexts applied to all pods/containers by default
+podSecurityContext:
+  runAsNonRoot: true
+  fsGroup: 1000
+  seccompProfile:
+    type: RuntimeDefault
+
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  capabilities:
+    drop:
+      - ALL
+
 imagePullSecrets: []
 nameOverride: ""
 fullnameOverride: ""
@@ -137,7 +176,10 @@ serviceAccount:
 
 # Centralized secrets
 secrets:
+  # Set existingSecret to use a pre-created Kubernetes Secret (e.g., from Vault, Sealed Secrets)
+  # When set, the chart will not create its own Secret resource
+  existingSecret: ""
   POSTGRES_USER: "postgres"
-  POSTGRES_PASSWORD: "changeme" # IMPORTANT: Change for production
+  POSTGRES_PASSWORD: "" # REQUIRED: Set via --set or values file
   POSTGRES_DB: "postgres"
-  OPENAI_API_KEY: "YOUR_OPENAI_API_KEY_HERE" # IMPORTANT: Change for production
+  LLM_API_KEY: "" # REQUIRED: Set via --set or values file. Auto-maps to provider-specific env var (OPENAI_API_KEY, ANTHROPIC_API_KEY, etc.)

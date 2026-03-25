@@ -1,3 +1,5 @@
+import os
+
 from mcp.server.fastmcp import FastMCP
 
 from geodini.agents.geocoder_agent import search, simplify_geometry
@@ -10,7 +12,8 @@ async def geocode(query: str) -> str:
     """Geocode a query and download the geojson geometry"""
     result = await search(query)
     if "result" in result and "geometry" in result["result"]:
-        return simplify_geometry(result["result"]["geometry"], tolerance_m=1000)
+        mcp_tolerance = float(os.getenv("GEOMETRY_MCP_SIMPLIFY_TOLERANCE", "1000"))
+        return simplify_geometry(result["result"]["geometry"], tolerance_m=mcp_tolerance)
     return "No geometry found for query"
 
 

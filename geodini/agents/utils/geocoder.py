@@ -107,7 +107,8 @@ def build_postgis_query(simplify_geometry: bool = True) -> str:
     """Build PostgreSQL query for searching overture unified data using trigram similarity"""
 
     # Choose geometry function based on whether to simplify
-    geometry_func = "ST_AsGeoJSON(ST_Simplify(geometry, 0.001))" if simplify_geometry else "ST_AsGeoJSON(geometry)"
+    db_tolerance = float(os.getenv("GEOMETRY_DB_SIMPLIFY_TOLERANCE", "0.001"))
+    geometry_func = f"ST_AsGeoJSON(ST_Simplify(geometry, {db_tolerance}))" if simplify_geometry else "ST_AsGeoJSON(geometry)"
 
     sql_query = f"""
         SELECT 
@@ -160,6 +161,48 @@ def build_postgis_query(simplify_geometry: bool = True) -> str:
     """
 
     return sql_query
+
+
+def get_geometry_by_id(
+    division_id: str, simplify: bool = True
+) -> dict[str, Any] | None:
+    """Retrieve geometry for a specific division by ID."""
+    engine = get_postgis_engine()
+    db_tolerance = float(os.getenv("GEOMETRY_DB_SIMPLIFY_TOLERANCE", "0.001"))
+
+    geometry_func = (
+        f"ST_AsGeoJSON(ST_Simplify(geometry, {db_tolerance}))"
+        if simplify
+        else "ST_AsGeoJSON(geometry)"
+    )
+
+    sql_query = f"""
+        SELECT
+            id,
+            COALESCE(common_en_name, primary_name) as name,
+            subtype, country,
+            {geometry_func} as geometry
+        FROM all_geometries
+        WHERE id = :id
+        LIMIT 1
+    """
+
+    try:
+        with engine.begin() as conn:
+            result = conn.execute(text(sql_query), {"id": division_id})
+            row = result.fetchone()
+            if row:
+                return {
+                    "id": row.id,
+                    "name": row.name,
+                    "subtype": row.subtype,
+                    "country": row.country,
+                    "geometry": json.loads(row.geometry) if row.geometry else None,
+                }
+    except Exception as e:
+        logger.error(f"Error retrieving geometry by ID: {e}")
+
+    return None
 
 
 if __name__ == "__main__":

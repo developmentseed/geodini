@@ -62,6 +62,17 @@ Create the name of the service account to use
 {{- end -}}
 
 {{/*
+Return the secret name to use for credentials.
+*/}}
+{{- define "geodini.secretName" -}}
+{{- if .Values.secrets.existingSecret -}}
+{{- .Values.secrets.existingSecret -}}
+{{- else -}}
+{{- include "geodini.fullname" . }}-geodini-secret
+{{- end -}}
+{{- end -}}
+
+{{/*
 Return the appropriate apiVersion for deployment.
 */}}
 {{- define "geodini.deployment.apiVersion" -}}
