@@ -233,25 +233,44 @@ async def simple_geocode(query: str, simplify_geometry: bool = True) -> dict:
     rephrased_query = await rephrase_agent.run(user_prompt=f"Search query: {query}")
     logger.info(f"Rephrased query: {pformat(rephrased_query.output)}")
 
+    # Search with both the rephrased query and the original query to avoid
+    # trigram misses (e.g. "russia" → "Russian Federation" drops below the
+    # similarity threshold for the DB entry "Russia").
+    queries_to_search = [rephrased_query.output.query]
+    if query.strip().lower() != rephrased_query.output.query.strip().lower():
+        queries_to_search.append(query)
+        logger.info(f"Also searching with original query: {query}")
+
     results = []
-    for geocoder_group in geocoders:
-        with ThreadPoolExecutor() as executor:
-            futures = []
-            for geocoder in geocoder_group:
-                # Check if geocoder supports simplify_geometry parameter (like our postgis geocoder)
-                try:
-                    import inspect
-                    sig = inspect.signature(geocoder)
-                    if 'simplify_geometry' in sig.parameters:
-                        futures.append(executor.submit(geocoder, rephrased_query.output.query, simplify_geometry))
-                    else:
-                        futures.append(executor.submit(geocoder, rephrased_query.output.query))
-                except:
-                    # Fallback to original call if inspection fails
-                    futures.append(executor.submit(geocoder, rephrased_query.output.query))
-            
-            for future in futures:
-                results.extend(future.result())
+    seen_ids: set[str] = set()
+    for search_query in queries_to_search:
+        for geocoder_group in geocoders:
+            with ThreadPoolExecutor() as executor:
+                futures = []
+                for geocoder in geocoder_group:
+                    try:
+                        import inspect
+                        sig = inspect.signature(geocoder)
+                        if 'simplify_geometry' in sig.parameters:
+                            futures.append(executor.submit(geocoder, search_query, simplify_geometry))
+                        else:
+                            futures.append(executor.submit(geocoder, search_query))
+                    except:
+                        futures.append(executor.submit(geocoder, search_query))
+
+                for future in futures:
+                    for result in future.result():
+                        rid = result["id"]
+                        if rid not in seen_ids:
+                            seen_ids.add(rid)
+                            results.append(result)
+                        else:
+                            # Keep the higher similarity score for deduped results
+                            for existing in results:
+                                if existing["id"] == rid:
+                                    if result.get("similarity", 0) > existing.get("similarity", 0):
+                                        existing["similarity"] = result["similarity"]
+                                    break
 
     for result in results:
         if result["hierarchies"] is not None:
